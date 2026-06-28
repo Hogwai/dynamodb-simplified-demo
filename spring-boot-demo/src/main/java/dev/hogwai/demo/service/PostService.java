@@ -98,7 +98,7 @@ public class PostService {
         return repository.search(criteria);
     }
 
-    // ============ Bonus: Batch Write ============
+    // ============ Batch Write ============
 
     public List<Post> batchWrite(List<CreatePostRequest> requests) {
         List<Post> posts = requests.stream()
@@ -118,7 +118,7 @@ public class PostService {
         return posts;
     }
 
-    // ============ Bonus: Batch Get ============
+    // ============ Batch Get ============
 
     public List<Post> batchGet(List<String[]> keys) {
         List<Post> postKeys = keys.stream()
@@ -127,7 +127,7 @@ public class PostService {
         return repository.batchGet(postKeys);
     }
 
-    // ============ Bonus: Transact Write ============
+    // ============ Transact Write ============
 
     public List<Post> transactWrite(CreatePostRequest request1, CreatePostRequest request2) {
         Post post1 = Post.builder()
@@ -156,13 +156,13 @@ public class PostService {
         return List.of(post1, post2);
     }
 
-    // ============ Bonus: Partial Update ============
+    // ============ Partial Update ============
 
     public Optional<Post> updatePartial(String subreddit, String id, Map<String, Object> updates) {
         return repository.updatePartial(subreddit, id, updates);
     }
 
-    // ============ Bonus: Delete with Return Values ============
+    // ============ Delete with Return Values ============
 
     public Optional<Post> deleteAndReturn(String subreddit, String id) {
         return repository.deleteAndReturn(subreddit, id);

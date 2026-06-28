@@ -21,7 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/posts")
@@ -109,7 +108,7 @@ public class PostController {
         return ResponseEntity.noContent().build();
     }
 
-    // ============ Bonus: Batch Write ============
+    // ============ Batch Write ============
 
     @PostMapping("/batch")
     @ResponseStatus(HttpStatus.CREATED)
@@ -117,14 +116,14 @@ public class PostController {
         return postService.batchWrite(requests);
     }
 
-    // ============ Bonus: Batch Get ============
+    // ============ Batch Get ============
 
     @PostMapping("/batch-get")
     public List<Post> batchGet(@RequestBody List<String[]> keys) {
         return postService.batchGet(keys);
     }
 
-    // ============ Bonus: Transact Write ============
+    // ============ Transact Write ============
 
     @PostMapping("/transact")
     @ResponseStatus(HttpStatus.CREATED)
@@ -135,7 +134,7 @@ public class PostController {
         return postService.transactWrite(requests.get(0), requests.get(1));
     }
 
-    // ============ Bonus: Partial Update ============
+    // ============ Partial Update ============
 
     @PatchMapping("/{subreddit}/{id}")
     public ResponseEntity<Post> updatePartial(@PathVariable String subreddit,

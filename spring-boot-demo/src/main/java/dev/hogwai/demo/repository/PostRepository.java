@@ -132,7 +132,7 @@ public class PostRepository {
         return true;
     }
 
-    // ============ Bonus: Batch Write ============
+    // ============ Batch Write ============
 
     public void batchWrite(List<Post> posts) {
         var batch = client.batchWrite();
@@ -142,7 +142,7 @@ public class PostRepository {
         batch.execute();
     }
 
-    // ============ Bonus: Batch Get ============
+    // ============ Batch Get ============
 
     public List<Post> batchGet(List<Post> posts) {
         var batch = client.batchGet();
@@ -153,7 +153,7 @@ public class PostRepository {
         return result.getItems(table);
     }
 
-    // ============ Bonus: Transact Write ============
+    // ============ Transact Write ============
 
     public void transactWrite(Post post1, Post post2) {
         client.transactWrite()
@@ -162,7 +162,7 @@ public class PostRepository {
                 .execute();
     }
 
-    // ============ Bonus: Partial Update ============
+    // ============ Partial Update ============
 
     public Optional<Post> updatePartial(String subreddit, String id, Map<String, Object> updates) {
         Post keyItem = Post.builder().subreddit(subreddit).id(id).build();
@@ -176,7 +176,7 @@ public class PostRepository {
                 .execute();
     }
 
-    // ============ Bonus: Delete with Return Values ============
+    // ============ Delete with Return Values ============
 
     public Optional<Post> deleteAndReturn(String subreddit, String id) {
         return table.delete(subreddit, id)
