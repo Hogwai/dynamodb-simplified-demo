@@ -4,7 +4,7 @@ Multi-framework demo project for [`dynamodb-simplified-core`](https://github.com
 
 Two complementary demo applications share a common `Post` model and run against the same DynamoDB Local table:
 
-| Application           | Framework       | Style                       | Port | Bonus Features                                                              |
+| Application           | Framework       | Style                       | Port | Additional Features                                                         |
 |-----------------------|-----------------|-----------------------------|------|-----------------------------------------------------------------------------|
 | **:micronaut-demo**   | Micronaut 4.10  | Async (`CompletableFuture`) | 8082 | `/count`, reactive `/stream`                                                |
 | **:spring-boot-demo** | Spring Boot 4.1 | Sync                        | 8080 | batch write/get, transact write, `PATCH` partial update, delete with return |
