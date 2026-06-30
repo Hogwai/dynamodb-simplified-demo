@@ -15,7 +15,7 @@ dependencies {
     implementation("jakarta.validation:jakarta.validation-api")
     implementation("software.amazon.awssdk:dynamodb-enhanced")
     implementation("software.amazon.awssdk:dynamodb")
-    implementation("net.datafaker:datafaker:2.5.3")
+    implementation("net.datafaker:datafaker:${property("datafakerVersion")}")
 
     annotationProcessor("io.micronaut:micronaut-http-validation")
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
@@ -23,13 +23,13 @@ dependencies {
 
     runtimeOnly("ch.qos.logback:logback-classic")
 
-    testImplementation("org.testcontainers:testcontainers:1.20.6")
-    testImplementation("org.testcontainers:junit-jupiter:1.20.6")
+    testImplementation("org.testcontainers:testcontainers:${property("testcontainersVersion")}")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter:${property("testcontainersVersion")}")
     testImplementation("io.projectreactor:reactor-test")
 }
 
 application {
-    mainClass = "dev.hogwai.app.Application"
+    mainClass = "dev.hogwai.micronaut.Application"
 }
 
 micronaut {
@@ -43,7 +43,7 @@ micronaut {
         optimizeServiceLoading = false
         convertYamlToJava = false
         precomputeOperations = true
-        cacheEnvironment = true
+        cacheEnvironment = false
         optimizeClassLoading = true
         deduceEnvironment = true
         optimizeNetty = true
