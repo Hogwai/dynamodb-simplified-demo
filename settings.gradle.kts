@@ -7,9 +7,11 @@ pluginManagement {
         id("com.gradleup.shadow") version "8.3.9"
         id("org.springframework.boot") version "4.1.0"
         id("io.spring.dependency-management") version "1.1.7"
+        id("io.quarkus") version "3.33.2.1"
     }
 }
 
 include("common")
 include("micronaut-demo")
 include("spring-boot-demo")
+include("quarkus-demo")

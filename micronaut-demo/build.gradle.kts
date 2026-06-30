@@ -29,7 +29,7 @@ dependencies {
 }
 
 application {
-    mainClass = "dev.hogwai.app.Application"
+    mainClass = "dev.hogwai.micronaut.Application"
 }
 
 micronaut {

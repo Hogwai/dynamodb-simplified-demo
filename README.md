@@ -2,12 +2,13 @@
 
 Multi-framework demo project for [`dynamodb-simplified-core`](https://github.com/hogwai/dynamodb-simplified), a fluent DynamoDB wrapper library for Java.
 
-Two complementary demo applications share a common `Post` model and run against the same DynamoDB Local table:
+Three complementary demo applications share a common `Post` model and run against the same DynamoDB Local table:
 
-| Application           | Framework       | Style                       | Port | Additional Features                                                         |
-|-----------------------|-----------------|-----------------------------|------|-----------------------------------------------------------------------------|
-| **:micronaut-demo**   | Micronaut 4.10  | Async (`CompletableFuture`) | 8082 | `/count`, reactive `/stream`                                                |
-| **:spring-boot-demo** | Spring Boot 4.1 | Sync                        | 8080 | batch write/get, transact write, `PATCH` partial update, delete with return |
+| Application           | Framework       | Style                           | Port | Additional Features                                                         |
+|-----------------------|-----------------|---------------------------------|------|-----------------------------------------------------------------------------|
+| **:micronaut-demo**   | Micronaut 4.10  | Async (`CompletableFuture`)     | 8082 | `/count`, reactive `/stream`                                                |
+| **:spring-boot-demo** | Spring Boot 4.1 | Sync                            | 8080 | batch write/get, transact write, `PATCH` partial update, delete with return |
+| **:quarkus-demo**     | Quarkus 3.22    | Sync + Reactive (Mutiny)        | 8084 | `/count`, reactive `/stream`                                                |
 
 ## Quick Start
 
@@ -18,9 +19,10 @@ docker compose up -d
 # 2. Create the posts table
 ./create-table.sh
 
-# 3. Run either demo (or both)
+# 3. Run any demo
 ./gradlew :micronaut-demo:run
 ./gradlew :spring-boot-demo:bootRun
+./gradlew :quarkus-demo:quarkusDev
 ```
 
 ## Project Structure
@@ -36,7 +38,7 @@ dynamodb-simplified-demo/
 │       ├── search/PostSearchCriteria.java
 │       └── exception/PostNotFoundException.java
 ├── micronaut-demo/                  # Async Micronaut application
-│   └── src/main/java/dev/hogwai/app/
+│   └── src/main/java/dev/hogwai/micronaut/
 │       ├── Application.java
 │       ├── config/DynamoDbFactory.java
 │       ├── repository/PostAsyncRepository.java
@@ -46,7 +48,7 @@ dynamodb-simplified-demo/
 │       ├── exception/GlobalExceptionHandler.java
 │       └── startup/DataGeneratorListener.java
 ├── spring-boot-demo/               # Sync Spring Boot application
-│   └── src/main/java/dev/hogwai/demo/
+│   └── src/main/java/dev/hogwai/springboot/
 │       ├── DemoApplication.java
 │       ├── config/DynamoDbConfig.java
 │       ├── repository/PostRepository.java
@@ -54,6 +56,16 @@ dynamodb-simplified-demo/
 │       ├── controller/PostController.java
 │       ├── dto/PostSearchRequest.java
 │       └── exception/GlobalExceptionHandler.java
+├── quarkus-demo/                   # Sync + Reactive Quarkus application
+│   └── src/main/java/dev/hogwai/quarkus/
+│       ├── config/DynamoDbProducer.java
+│       ├── repository/PostRepository.java
+│       ├── repository/PostReactiveRepository.java
+│       ├── service/PostService.java
+│       ├── service/PostReactiveService.java
+│       ├── controller/PostController.java
+│       ├── dto/PostSearchRequest.java
+│       └── exception/GlobalExceptionMapper.java
 ├── docker-compose.yml               # DynamoDB Local + Admin UI
 ├── create-table.sh                  # Creates the posts table
 ├── settings.gradle.kts              # Multi-module config
@@ -77,7 +89,7 @@ All endpoints under `/api/posts`. Both demos expose these base operations:
 | `GET`    | `/api/posts/{subreddit}/author/{author}` | Posts by author            |
 | `GET`    | `/api/posts/{subreddit}/recent`          | Recent posts (N hours)     |
 
-### Micronaut-only endpoints
+### Micronaut & Quarkus-only endpoints
 
 | Method | Path                            | Description                               |
 |--------|---------------------------------|-------------------------------------------|
@@ -109,6 +121,7 @@ All endpoints under `/api/posts`. Both demos expose these base operations:
 # Run integration tests (requires Docker — Testcontainers starts DynamoDB Local)
 ./gradlew :micronaut-demo:integrationTest
 ./gradlew :spring-boot-demo:integrationTest
+./gradlew :quarkus-demo:test
 
 # Full check
 ./gradlew check
@@ -116,7 +129,7 @@ All endpoints under `/api/posts`. Both demos expose these base operations:
 
 ## Data Generation
 
-Both demos can seed the `posts` table with random data on startup:
+The Micronaut and Spring Boot demos can seed the `posts` table with random data on startup:
 
 ```sh
 # Micronaut
@@ -133,6 +146,7 @@ MICRONAUT_ENVIRONMENTS=local ./gradlew :micronaut-demo:run -Dapp.data-generator.
 - **dynamodb-simplified-core 0.1.0** ([Maven Central](https://central.sonatype.com/artifact/dev.hogwai/dynamodb-simplified-core))
 - **Micronaut 4.10** (Netty, Serde, Validation)
 - **Spring Boot 4.1** (Web, Validation)
+- **Quarkus 3.22** (RESTEasy Reactive, ArC, Mutiny)
 - **AWS SDK v2** (DynamoDB Enhanced Client)
 - **Lombok** 1.18.42
 - **Testcontainers** (DynamoDB Local integration tests)
