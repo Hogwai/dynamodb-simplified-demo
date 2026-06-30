@@ -1,6 +1,8 @@
 package dev.hogwai.quarkus;
 
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -12,6 +14,8 @@ import java.net.URI;
 import java.util.Map;
 
 public class DynamoDbTestResource implements QuarkusTestResourceLifecycleManager {
+
+    private static final Logger log = LoggerFactory.getLogger(DynamoDbTestResource.class);
 
     public static String dynamoDbEndpoint;
 
@@ -36,7 +40,7 @@ public class DynamoDbTestResource implements QuarkusTestResourceLifecycleManager
                                 AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
                         .billingMode(BillingMode.PAY_PER_REQUEST)
                         .build());
-                System.out.println("Created 'posts' table via DynamoDbTestResource");
+                log.info("Created 'posts' table via DynamoDbTestResource");
             }
         }
     }

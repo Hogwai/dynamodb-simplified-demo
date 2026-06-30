@@ -8,7 +8,9 @@
         </encoder>
     </appender>
 
+    <logger name="dev.hogwai" level="DEBUG"/>
+    <logger name="software.amazon.awssdk" level="DEBUG"/>
     <root level="info">
-        <appender-ref ref="STDOUT" />
+        <appender-ref ref="STDOUT"/>
     </root>
 </configuration>

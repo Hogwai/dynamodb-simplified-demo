@@ -51,6 +51,13 @@ public class PostController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // ============ Base: Count ============
+
+    @GetMapping("/{subreddit}/count")
+    public long countPosts(@PathVariable String subreddit) {
+        return postService.countPosts(subreddit);
+    }
+
     // ============ Base: Search ============
 
     @GetMapping("/{subreddit}/search")
@@ -96,12 +103,12 @@ public class PostController {
     // ============ Base: Delete post ============
 
     @DeleteMapping("/{subreddit}/{id}")
-    public ResponseEntity<?> deletePost(@PathVariable String subreddit,
+    public ResponseEntity<Object> deletePost(@PathVariable String subreddit,
                                         @PathVariable String id,
                                         @RequestParam(defaultValue = "false") boolean returnDeleted) {
         if (returnDeleted) {
             return postService.deleteAndReturn(subreddit, id)
-                    .map(ResponseEntity::ok)
+                    .map(ResponseEntity::<Object>ok)
                     .orElse(ResponseEntity.notFound().build());
         }
         postService.deletePost(subreddit, id);

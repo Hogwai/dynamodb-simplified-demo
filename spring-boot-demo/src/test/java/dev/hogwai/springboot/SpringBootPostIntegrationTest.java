@@ -5,9 +5,12 @@ import dev.hogwai.demo.model.Post;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.HttpClientErrorException;
@@ -57,6 +60,15 @@ class SpringBootPostIntegrationTest {
         dynamoDb.stop();
     }
 
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("aws.dynamodb.endpoint-override",
+                () -> "http://" + dynamoDb.getHost() + ":" + dynamoDb.getMappedPort(8000));
+    }
+
+    @Autowired
+    DynamoDbClient dynamoDbClient;
+
     @LocalServerPort
     int port;
 
@@ -65,6 +77,20 @@ class SpringBootPostIntegrationTest {
     @BeforeEach
     void setUp() {
         restClient = RestClient.create("http://localhost:" + port);
+        // Ensure table exists (created by static initializer but may not be visible to app's client)
+        var tables = dynamoDbClient.listTables().tableNames();
+        if (!tables.contains("posts")) {
+            dynamoDbClient.createTable(CreateTableRequest.builder()
+                    .tableName("posts")
+                    .keySchema(
+                            KeySchemaElement.builder().attributeName("subreddit").keyType(KeyType.HASH).build(),
+                            KeySchemaElement.builder().attributeName("id").keyType(KeyType.RANGE).build())
+                    .attributeDefinitions(
+                            AttributeDefinition.builder().attributeName("subreddit").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
+                    .billingMode(BillingMode.PAY_PER_REQUEST)
+                    .build());
+        }
     }
 
     @Test
@@ -171,7 +197,8 @@ class SpringBootPostIntegrationTest {
                 restClient.get()
                         .uri("/api/posts/{subreddit}/{id}", subreddit, created.getId())
                         .retrieve()
-                        .toEntity(Post.class));
+                        .toEntity(Post.class)
+        );
     }
 
     @Test

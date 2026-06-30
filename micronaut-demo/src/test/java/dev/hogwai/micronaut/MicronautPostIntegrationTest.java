@@ -3,6 +3,7 @@ package dev.hogwai.micronaut;
 import dev.hogwai.demo.dto.CreatePostRequest;
 import dev.hogwai.demo.model.Post;
 import io.micronaut.core.type.Argument;
+import io.micronaut.serde.annotation.Serdeable;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.client.HttpClient;
@@ -11,6 +12,7 @@ import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import reactor.test.StepVerifier;
@@ -18,6 +20,7 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
 import java.net.URI;
@@ -38,9 +41,10 @@ class MicronautPostIntegrationTest {
         System.setProperty("aws.dynamodb.endpoint-override",
                 "http://" + dynamoDb.getHost() + ":" + dynamoDb.getMappedPort(8000));
 
+        String endpoint = "http://" + dynamoDb.getHost() + ":" + dynamoDb.getMappedPort(8000);
         try (var client = DynamoDbClient.builder()
                 .region(Region.EU_WEST_3)
-                .endpointOverride(URI.create("http://" + dynamoDb.getHost() + ":" + dynamoDb.getMappedPort(8000)))
+                .endpointOverride(URI.create(endpoint))
                 .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("fake", "fake")))
                 .build()) {
             client.createTable(CreateTableRequest.builder()
@@ -53,6 +57,16 @@ class MicronautPostIntegrationTest {
                             AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
                     .billingMode(BillingMode.PAY_PER_REQUEST)
                     .build());
+            System.out.println("Tables after creation: " + client.listTables().tableNames());
+        }
+        // Also create via async client to ensure consistency
+        try (var asyncClient = DynamoDbAsyncClient.builder()
+                .region(Region.EU_WEST_3)
+                .endpointOverride(URI.create(endpoint))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("fake", "fake")))
+                .build()) {
+            var tables = asyncClient.listTables().join().tableNames();
+            System.out.println("Tables from async client: " + tables);
         }
     }
 
@@ -64,6 +78,30 @@ class MicronautPostIntegrationTest {
     @Inject
     @Client("/")
     HttpClient client;
+
+    @Inject
+    software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient asyncClient;
+
+    @BeforeEach
+    void ensureTable() {
+        var tables = asyncClient.listTables().join().tableNames();
+        System.out.println("BEFORE TEST - Tables from app async client: " + tables
+            + " at endpoint: " + System.getProperty("aws.dynamodb.endpoint-override"));
+        if (!tables.contains("posts")) {
+            System.out.println("Creating table via app async client!");
+            asyncClient.createTable(CreateTableRequest.builder()
+                    .tableName("posts")
+                    .keySchema(
+                            KeySchemaElement.builder().attributeName("subreddit").keyType(KeyType.HASH).build(),
+                            KeySchemaElement.builder().attributeName("id").keyType(KeyType.RANGE).build())
+                    .attributeDefinitions(
+                            AttributeDefinition.builder().attributeName("subreddit").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
+                    .billingMode(BillingMode.PAY_PER_REQUEST)
+                    .build()).join();
+            System.out.println("Table created successfully");
+        }
+    }
 
     @Test
     void testCreateAndGetPost() {
@@ -340,6 +378,7 @@ class MicronautPostIntegrationTest {
      * because it lacks a default constructor and setters.
      */
     @SuppressWarnings("unused")
+    @Serdeable
     static class PagedResponse {
         private List<Post> items;
         private String nextCursor;

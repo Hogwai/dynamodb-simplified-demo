@@ -63,6 +63,14 @@ public class PostRepository {
         return query.executeWithPagination();
     }
 
+    // ============ Count ============
+
+    public long countBySubreddit(String subreddit) {
+        return table.query()
+                .partitionKey(subreddit)
+                .count();
+    }
+
     // ============ Dynamic Search ============
 
     public List<Post> search(PostSearchCriteria criteria) {

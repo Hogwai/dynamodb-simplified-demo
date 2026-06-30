@@ -5,6 +5,7 @@ import dev.hogwai.micronaut.service.PostService;
 import dev.hogwai.demo.dto.CreatePostRequest;
 import dev.hogwai.demo.dto.PagedResponse;
 import dev.hogwai.demo.model.Post;
+import io.micronaut.core.annotation.Nullable;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
@@ -31,7 +32,7 @@ public class PostController {
 
     @Get("/{subreddit}")
     public CompletableFuture<List<Post>> listPosts(@PathVariable String subreddit,
-                                                    @QueryValue Integer limit) {
+                                                    @QueryValue @Nullable Integer limit) {
         return postService.getRecentPosts(subreddit, limit != null ? limit : 50);
     }
 
@@ -49,16 +50,16 @@ public class PostController {
 
     @Get("/{subreddit}/recent")
     public CompletableFuture<List<Post>> getRecentPosts(@PathVariable String subreddit,
-                                                         @QueryValue Integer hours) {
-        return postService.getPostsLastHours(subreddit, hours);
+                                                         @QueryValue @Nullable Integer hours) {
+        return postService.getPostsLastHours(subreddit, hours != null ? hours : 24);
     }
 
     @Get("/{subreddit}/search")
     public CompletableFuture<List<Post>> search(@PathVariable String subreddit,
-                                                 @QueryValue String author,
-                                                 @QueryValue String keyword,
-                                                 @QueryValue Long since,
-                                                 @QueryValue Integer limit) {
+                                                 @QueryValue @Nullable String author,
+                                                 @QueryValue @Nullable String keyword,
+                                                 @QueryValue @Nullable Long since,
+                                                 @QueryValue @Nullable Integer limit) {
         PostSearchRequest request = PostSearchRequest.builder()
                 .subreddit(subreddit)
                 .author(author)
@@ -72,8 +73,8 @@ public class PostController {
 
     @Get("/{subreddit}/paginated")
     public CompletableFuture<PagedResponse<Post>> listPostsPaginated(@PathVariable String subreddit,
-                                                                      @QueryValue Integer pageSize,
-                                                                      @QueryValue String cursor) {
+                                                                      @QueryValue @Nullable Integer pageSize,
+                                                                      @QueryValue @Nullable String cursor) {
         return postService.getPostsPaginated(subreddit, pageSize != null ? pageSize : 20, cursor);
     }
 

@@ -24,17 +24,17 @@ public class PostAsyncRepository implements AutoCloseable {
     public static final String TITLE = "title";
     public static final String KEYWORDS = "keywords";
 
+    private final AsyncDynamoSimplifiedClient client;
     private final AsyncTable<Post> table;
 
     public PostAsyncRepository(DynamoDbAsyncClient dynamoDbAsyncClient) {
-        var client = AsyncDynamoSimplifiedClient.create(dynamoDbAsyncClient);
+        this.client = AsyncDynamoSimplifiedClient.create(dynamoDbAsyncClient);
         this.table = client.table(TABLE_NAME, Post.class);
     }
 
     @Override
     public void close() {
-        // AsyncDynamoSimplifiedClient doesn't need explicit close
-        // (the DynamoDbAsyncClient is managed by Micronaut)
+        client.close();
     }
 
     // ============ Basic CRUD ============
@@ -74,7 +74,8 @@ public class PostAsyncRepository implements AutoCloseable {
                 .partitionKey(subreddit)
                 .descending()
                 .limit(limit)
-                .executeAll();
+                .executeWithPagination()
+                .thenApply(PagedResult::items);
     }
 
     public CompletableFuture<PagedResult<Post>> findBySubredditPaginated(String subreddit,

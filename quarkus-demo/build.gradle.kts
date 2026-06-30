@@ -11,7 +11,7 @@ tasks.named("test") {
 
 dependencies {
     implementation(project(":common"))
-    implementation("dev.hogwai:dynamodb-simplified-core:0.1.0")
+    implementation("dev.hogwai:dynamodb-simplified-core:${property("dynamodbSimplifiedCoreVersion")}")
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:3.33.2.1"))
     implementation("io.quarkus:quarkus-rest-jackson")
     implementation("io.quarkus:quarkus-arc")
@@ -20,6 +20,6 @@ dependencies {
     testImplementation("io.quarkus:quarkus-junit5")
     testImplementation("io.rest-assured:rest-assured")
     testImplementation("io.quarkus:quarkus-test-security")
-    testImplementation("org.testcontainers:testcontainers:1.20.6")
-    testImplementation("org.testcontainers:junit-jupiter:1.20.6")
+    testImplementation("org.testcontainers:testcontainers:${property("testcontainersVersion")}")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter:${property("testcontainersVersion")}")
 }

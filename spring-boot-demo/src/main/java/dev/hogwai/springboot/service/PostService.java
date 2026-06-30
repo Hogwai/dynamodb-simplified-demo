@@ -83,6 +83,10 @@ public class PostService {
                 .build();
     }
 
+    public long countPosts(String subreddit) {
+        return repository.countBySubreddit(subreddit);
+    }
+
     public List<Post> search(PostSearchRequest request) {
         PostSearchCriteria criteria = PostSearchCriteria.builder()
                 .subreddit(request.getSubreddit())
