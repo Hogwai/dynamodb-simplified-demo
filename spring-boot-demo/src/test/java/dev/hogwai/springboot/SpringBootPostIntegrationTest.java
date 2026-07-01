@@ -2,6 +2,9 @@ package dev.hogwai.springboot;
 
 import dev.hogwai.demo.dto.CreatePostRequest;
 import dev.hogwai.demo.model.Post;
+import dev.hogwai.springboot.dto.BatchMixedRequest;
+import dev.hogwai.springboot.dto.PartiQLRequest;
+import dev.hogwai.springboot.dto.TransactAdvancedRequest;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,10 +12,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.testcontainers.containers.GenericContainer;
@@ -49,21 +52,31 @@ class SpringBootPostIntegrationTest {
                             KeySchemaElement.builder().attributeName("id").keyType(KeyType.RANGE).build())
                     .attributeDefinitions(
                             AttributeDefinition.builder().attributeName("subreddit").attributeType(ScalarAttributeType.S).build(),
-                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
+                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("author").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("createdUtc").attributeType(ScalarAttributeType.N).build())
+                    .globalSecondaryIndexes(
+                            GlobalSecondaryIndex.builder()
+                                    .indexName("author-index")
+                                    .keySchema(
+                                            KeySchemaElement.builder().attributeName("author").keyType(KeyType.HASH).build(),
+                                            KeySchemaElement.builder().attributeName("createdUtc").keyType(KeyType.RANGE).build())
+                                    .projection(Projection.builder().projectionType(ProjectionType.ALL).build())
+                                    .build())
                     .billingMode(BillingMode.PAY_PER_REQUEST)
                     .build());
         }
-    }
-
-    @AfterAll
-    static void stopContainer() {
-        dynamoDb.stop();
     }
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("aws.dynamodb.endpoint-override",
                 () -> "http://" + dynamoDb.getHost() + ":" + dynamoDb.getMappedPort(8000));
+    }
+
+    @AfterAll
+    static void stopContainer() {
+        dynamoDb.stop();
     }
 
     @Autowired
@@ -87,7 +100,17 @@ class SpringBootPostIntegrationTest {
                             KeySchemaElement.builder().attributeName("id").keyType(KeyType.RANGE).build())
                     .attributeDefinitions(
                             AttributeDefinition.builder().attributeName("subreddit").attributeType(ScalarAttributeType.S).build(),
-                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
+                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("author").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("createdUtc").attributeType(ScalarAttributeType.N).build())
+                    .globalSecondaryIndexes(
+                            GlobalSecondaryIndex.builder()
+                                    .indexName("author-index")
+                                    .keySchema(
+                                            KeySchemaElement.builder().attributeName("author").keyType(KeyType.HASH).build(),
+                                            KeySchemaElement.builder().attributeName("createdUtc").keyType(KeyType.RANGE).build())
+                                    .projection(Projection.builder().projectionType(ProjectionType.ALL).build())
+                                    .build())
                     .billingMode(BillingMode.PAY_PER_REQUEST)
                     .build());
         }
@@ -194,11 +217,7 @@ class SpringBootPostIntegrationTest {
         assertEquals(HttpStatus.NO_CONTENT, deleteResponse.getStatusCode());
 
         assertThrows(HttpClientErrorException.class, () ->
-                restClient.get()
-                        .uri("/api/posts/{subreddit}/{id}", subreddit, created.getId())
-                        .retrieve()
-                        .toEntity(Post.class)
-        );
+                getPostExpecting404(subreddit, created.getId()));
     }
 
     @Test
@@ -349,22 +368,210 @@ class SpringBootPostIntegrationTest {
         assertEquals(2, batchGetResult.size());
     }
 
+    @Test
+    void testGsiQueryByAuthor() {
+        String subreddit = "test-gsi-" + UUID.randomUUID();
+        String author = "gsi-author-" + UUID.randomUUID();
+
+        for (int i = 0; i < 2; i++) {
+            CreatePostRequest req = CreatePostRequest.builder()
+                    .subreddit(subreddit).author(author).title("GSI Post " + i).build();
+            restClient.post().uri("/api/posts").body(req).retrieve().toEntity(Post.class);
+        }
+
+        ResponseEntity<List<Post>> response = restClient.get()
+                .uri("/api/posts/by-author/{author}", author)
+                .retrieve()
+                .toEntity(new ParameterizedTypeReference<>() {
+                });
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        List<Post> results = response.getBody();
+        assertNotNull(results);
+        assertTrue(results.size() >= 2);
+        results.forEach(p -> assertEquals(author, p.getAuthor()));
+    }
+
+    @Test
+    void testBatchWriteWithDeletes() {
+        String subreddit = "test-bm-" + UUID.randomUUID();
+        String author = "bm-author";
+
+        CreatePostRequest req = CreatePostRequest.builder()
+                .subreddit(subreddit).author(author).title("Batch Mixed").build();
+        Post created = restClient.post().uri("/api/posts").body(req).retrieve().toEntity(Post.class).getBody();
+        assertNotNull(created);
+
+        // Batch-mixed: create a new post and delete the existing one
+        CreatePostRequest newReq = CreatePostRequest.builder()
+                .subreddit(subreddit).author(author).title("New Mixed").build();
+        BatchMixedRequest mixedReq = BatchMixedRequest.builder()
+                .puts(List.of(newReq))
+                .deletes(List.of(List.of(subreddit, created.getId())))
+                .build();
+
+        ResponseEntity<Void> response = restClient.post()
+                .uri("/api/posts/batch-mixed")
+                .body(mixedReq)
+                .retrieve()
+                .toBodilessEntity();
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+
+        // Verify the deleted post is gone
+        assertThrows(HttpClientErrorException.class, () ->
+                getPostExpecting404(subreddit, created.getId()));
+    }
+
+    @Test
+    void testTransactWriteAdvanced() {
+        String subreddit = "test-ta-" + UUID.randomUUID();
+        String author = "ta-author";
+
+        // Create a target post for the condition check
+        CreatePostRequest checkReq = CreatePostRequest.builder()
+                .subreddit(subreddit).author(author).title("Check Target").build();
+        Post checkPost = restClient.post().uri("/api/posts").body(checkReq).retrieve().toEntity(Post.class).getBody();
+        assertNotNull(checkPost);
+
+        // TransactWriteAdvanced: put a new post atomically + conditionCheck an existing item
+        CreatePostRequest newReq = CreatePostRequest.builder()
+                .subreddit(subreddit).author(author).title("TA New").build();
+        TransactAdvancedRequest taReq = TransactAdvancedRequest.builder()
+                .puts(List.of(newReq))
+                .conditionCheck(List.of(subreddit, checkPost.getId()))
+                .build();
+
+        ResponseEntity<Void> response = restClient.post()
+                .uri("/api/posts/transact-advanced")
+                .body(taReq)
+                .retrieve()
+                .toBodilessEntity();
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+    }
+
+    @Test
+    void testTransactGet() {
+        String subreddit = "test-tg-" + UUID.randomUUID();
+        CreatePostRequest req1 = CreatePostRequest.builder()
+                .subreddit(subreddit).author("tg-author").title("TG 1").build();
+        CreatePostRequest req2 = CreatePostRequest.builder()
+                .subreddit(subreddit).author("tg-author").title("TG 2").build();
+
+        Post post1 = restClient.post().uri("/api/posts").body(req1).retrieve().toEntity(Post.class).getBody();
+        Post post2 = restClient.post().uri("/api/posts").body(req2).retrieve().toEntity(Post.class).getBody();
+        assertNotNull(post1);
+        assertNotNull(post2);
+
+        List<List<String>> keys = List.of(
+                List.of(subreddit, post1.getId()),
+                List.of(subreddit, post2.getId())
+        );
+
+        ResponseEntity<List<Post>> response = restClient.post()
+                .uri("/api/posts/transact-get")
+                .body(keys)
+                .retrieve()
+                .toEntity(new ParameterizedTypeReference<>() {
+                });
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        List<Post> results = response.getBody();
+        assertNotNull(results);
+        assertEquals(2, results.size());
+    }
+
+    @Test
+    void testPartiQL() {
+        String subreddit = "test-partiql-" + UUID.randomUUID();
+        CreatePostRequest req = CreatePostRequest.builder()
+                .subreddit(subreddit).author("partiql-author").title("PartiQL Test").build();
+
+        Post created = restClient.post().uri("/api/posts").body(req).retrieve().toEntity(Post.class).getBody();
+        assertNotNull(created);
+
+        PartiQLRequest partiqlReq = PartiQLRequest.builder()
+                .statement("SELECT * FROM \"posts\" WHERE subreddit='%s' AND id='%s'".formatted(subreddit, created.getId()))
+                .build();
+
+        ResponseEntity<String> response = restClient.post()
+                .uri("/api/posts/partiql")
+                .body(partiqlReq)
+                .retrieve()
+                .toEntity(String.class);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+    }
+
+    @Test
+    void testListTables() {
+        ResponseEntity<List<String>> response = restClient.get()
+                .uri("/api/posts/admin/tables")
+                .retrieve()
+                .toEntity(new ParameterizedTypeReference<>() {
+                });
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        List<String> tables = response.getBody();
+        assertNotNull(tables);
+        assertTrue(tables.contains("posts"));
+    }
+
+    @Test
+    void testEntityTable() {
+        String subreddit = "test-entity-" + UUID.randomUUID();
+        CreatePostRequest req = CreatePostRequest.builder()
+                .subreddit(subreddit).author("entity-author").title("Entity Test").build();
+
+        Post created = restClient.post().uri("/api/posts").body(req).retrieve().toEntity(Post.class).getBody();
+        assertNotNull(created);
+
+        ResponseEntity<Post> entityResponse = restClient.get()
+                .uri("/api/posts/entity/{pk}/{sk}", subreddit, created.getId())
+                .retrieve()
+                .toEntity(Post.class);
+        assertEquals(HttpStatus.OK, entityResponse.getStatusCode());
+        Post entityResult = entityResponse.getBody();
+        assertNotNull(entityResult);
+        assertEquals(created.getId(), entityResult.getId());
+    }
+
     /**
      * Local DTO for deserializing paginated responses.
      * The shared dev.hogwai.demo.dto.PagedResponse cannot be deserialized by Jackson
      * because it lacks a default constructor and setters.
      */
+    private ResponseEntity<Post> getPostExpecting404(String subreddit, String id) {
+        return restClient.get()
+                .uri("/api/posts/{subreddit}/{id}", subreddit, id)
+                .retrieve()
+                .toEntity(Post.class);
+    }
+
     @SuppressWarnings("unused")
     static class PagedResponse {
         private List<Post> items;
         private String nextCursor;
         private boolean hasMore;
 
-        public List<Post> getItems() { return items; }
-        public void setItems(List<Post> items) { this.items = items; }
-        public String getNextCursor() { return nextCursor; }
-        public void setNextCursor(String nextCursor) { this.nextCursor = nextCursor; }
-        public boolean isHasMore() { return hasMore; }
-        public void setHasMore(boolean hasMore) { this.hasMore = hasMore; }
+        public List<Post> getItems() {
+            return items;
+        }
+
+        public void setItems(List<Post> items) {
+            this.items = items;
+        }
+
+        public String getNextCursor() {
+            return nextCursor;
+        }
+
+        public void setNextCursor(String nextCursor) {
+            this.nextCursor = nextCursor;
+        }
+
+        public boolean isHasMore() {
+            return hasMore;
+        }
+
+        public void setHasMore(boolean hasMore) {
+            this.hasMore = hasMore;
+        }
     }
 }

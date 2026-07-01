@@ -1,20 +1,15 @@
 package dev.hogwai.micronaut.controller;
 
-import dev.hogwai.micronaut.dto.PostSearchRequest;
-import dev.hogwai.micronaut.service.PostService;
 import dev.hogwai.demo.dto.CreatePostRequest;
 import dev.hogwai.demo.dto.PagedResponse;
 import dev.hogwai.demo.model.Post;
+import dev.hogwai.micronaut.dto.PartiQLRequest;
+import dev.hogwai.micronaut.dto.PostSearchRequest;
+import dev.hogwai.micronaut.service.PostService;
 import io.micronaut.core.annotation.Nullable;
+import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
-import io.micronaut.http.annotation.Body;
-import io.micronaut.http.annotation.Controller;
-import io.micronaut.http.annotation.Delete;
-import io.micronaut.http.annotation.Get;
-import io.micronaut.http.annotation.PathVariable;
-import io.micronaut.http.annotation.Put;
-import io.micronaut.http.annotation.QueryValue;
-import io.micronaut.http.annotation.Status;
+import io.micronaut.http.annotation.*;
 import software.amazon.awssdk.core.async.SdkPublisher;
 
 import java.util.List;
@@ -32,34 +27,34 @@ public class PostController {
 
     @Get("/{subreddit}")
     public CompletableFuture<List<Post>> listPosts(@PathVariable String subreddit,
-                                                    @QueryValue @Nullable Integer limit) {
+                                                   @QueryValue @Nullable Integer limit) {
         return postService.getRecentPosts(subreddit, limit != null ? limit : 50);
     }
 
     @Get("/{subreddit}/{id}")
     public CompletableFuture<Optional<Post>> getPost(@PathVariable String subreddit,
-                                                      @PathVariable String id) {
+                                                     @PathVariable String id) {
         return postService.getPost(subreddit, id);
     }
 
     @Get("/{subreddit}/author/{author}")
     public CompletableFuture<List<Post>> getByAuthor(@PathVariable String subreddit,
-                                                      @PathVariable String author) {
+                                                     @PathVariable String author) {
         return postService.getPostsByAuthor(subreddit, author);
     }
 
     @Get("/{subreddit}/recent")
     public CompletableFuture<List<Post>> getRecentPosts(@PathVariable String subreddit,
-                                                         @QueryValue @Nullable Integer hours) {
+                                                        @QueryValue @Nullable Integer hours) {
         return postService.getPostsLastHours(subreddit, hours != null ? hours : 24);
     }
 
     @Get("/{subreddit}/search")
     public CompletableFuture<List<Post>> search(@PathVariable String subreddit,
-                                                 @QueryValue @Nullable String author,
-                                                 @QueryValue @Nullable String keyword,
-                                                 @QueryValue @Nullable Long since,
-                                                 @QueryValue @Nullable Integer limit) {
+                                                @QueryValue @Nullable String author,
+                                                @QueryValue @Nullable String keyword,
+                                                @QueryValue @Nullable Long since,
+                                                @QueryValue @Nullable Integer limit) {
         PostSearchRequest request = PostSearchRequest.builder()
                 .subreddit(subreddit)
                 .author(author)
@@ -73,8 +68,8 @@ public class PostController {
 
     @Get("/{subreddit}/paginated")
     public CompletableFuture<PagedResponse<Post>> listPostsPaginated(@PathVariable String subreddit,
-                                                                      @QueryValue @Nullable Integer pageSize,
-                                                                      @QueryValue @Nullable String cursor) {
+                                                                     @QueryValue @Nullable Integer pageSize,
+                                                                     @QueryValue @Nullable String cursor) {
         return postService.getPostsPaginated(subreddit, pageSize != null ? pageSize : 20, cursor);
     }
 
@@ -96,15 +91,69 @@ public class PostController {
 
     @Put("/{subreddit}/{id}")
     public CompletableFuture<Post> updatePost(@PathVariable String subreddit,
-                                               @PathVariable String id,
-                                               @Body Post post) {
+                                              @PathVariable String id,
+                                              @Body Post post) {
         return postService.updatePost(subreddit, id, post);
     }
 
     @Delete("/{subreddit}/{id}")
     @Status(HttpStatus.NO_CONTENT)
     public CompletableFuture<Void> deletePost(@PathVariable String subreddit,
-                                               @PathVariable String id) {
+                                              @PathVariable String id) {
         return postService.deletePost(subreddit, id);
     }
+
+    // region GSI Query
+
+    @Get("/by-author/{author}")
+    public CompletableFuture<List<Post>> getByAuthorGsi(@PathVariable String author) {
+        return postService.getPostsByAuthorGsi(author);
+    }
+
+    // endregion
+
+    // region Transact Get
+
+    @io.micronaut.http.annotation.Post("/transact-get")
+    public CompletableFuture<List<Post>> transactGet(@Body List<List<String>> keys) {
+        return postService.transactGet(keys);
+    }
+
+    // endregion
+
+    // region PartiQL
+
+    @io.micronaut.http.annotation.Post("/partiql")
+    @Status(HttpStatus.OK)
+    public CompletableFuture<HttpResponse<Void>> executePartiQL(@Body PartiQLRequest request) {
+        return postService.executePartiQL(request.getStatement())
+                .thenApply(items -> HttpResponse.ok());
+    }
+
+    // endregion
+
+    // region List Tables
+
+    @Get("/admin/tables")
+    public CompletableFuture<List<String>> listTables() {
+        return postService.listTables();
+    }
+
+    // endregion
+
+    // region Entity Table
+
+    @io.micronaut.http.annotation.Post("/entity")
+    @Status(HttpStatus.CREATED)
+    public CompletableFuture<Void> entityPut(@Body CreatePostRequest request) {
+        return postService.entityPut(request);
+    }
+
+    @Get("/entity/{pk}/{sk}")
+    public CompletableFuture<Post> entityGet(@PathVariable String pk,
+                                              @PathVariable String sk) {
+        return postService.entityGet(pk, sk);
+    }
+
+    // endregion
 }

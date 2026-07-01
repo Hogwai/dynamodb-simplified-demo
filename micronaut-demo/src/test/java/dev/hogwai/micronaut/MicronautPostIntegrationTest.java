@@ -2,13 +2,14 @@ package dev.hogwai.micronaut;
 
 import dev.hogwai.demo.dto.CreatePostRequest;
 import dev.hogwai.demo.model.Post;
+import dev.hogwai.micronaut.dto.PartiQLRequest;
 import io.micronaut.core.type.Argument;
-import io.micronaut.serde.annotation.Serdeable;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.client.HttpClient;
 import io.micronaut.http.client.annotation.Client;
 import io.micronaut.http.client.exceptions.HttpClientResponseException;
+import io.micronaut.serde.annotation.Serdeable;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterAll;
@@ -19,8 +20,8 @@ import reactor.test.StepVerifier;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
 import java.net.URI;
@@ -54,7 +55,17 @@ class MicronautPostIntegrationTest {
                             KeySchemaElement.builder().attributeName("id").keyType(KeyType.RANGE).build())
                     .attributeDefinitions(
                             AttributeDefinition.builder().attributeName("subreddit").attributeType(ScalarAttributeType.S).build(),
-                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
+                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("author").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("createdUtc").attributeType(ScalarAttributeType.N).build())
+                    .globalSecondaryIndexes(
+                            GlobalSecondaryIndex.builder()
+                                    .indexName("author-index")
+                                    .keySchema(
+                                            KeySchemaElement.builder().attributeName("author").keyType(KeyType.HASH).build(),
+                                            KeySchemaElement.builder().attributeName("createdUtc").keyType(KeyType.RANGE).build())
+                                    .projection(Projection.builder().projectionType(ProjectionType.ALL).build())
+                                    .build())
                     .billingMode(BillingMode.PAY_PER_REQUEST)
                     .build());
             System.out.println("Tables after creation: " + client.listTables().tableNames());
@@ -86,7 +97,7 @@ class MicronautPostIntegrationTest {
     void ensureTable() {
         var tables = asyncClient.listTables().join().tableNames();
         System.out.println("BEFORE TEST - Tables from app async client: " + tables
-            + " at endpoint: " + System.getProperty("aws.dynamodb.endpoint-override"));
+                + " at endpoint: " + System.getProperty("aws.dynamodb.endpoint-override"));
         if (!tables.contains("posts")) {
             System.out.println("Creating table via app async client!");
             asyncClient.createTable(CreateTableRequest.builder()
@@ -96,7 +107,17 @@ class MicronautPostIntegrationTest {
                             KeySchemaElement.builder().attributeName("id").keyType(KeyType.RANGE).build())
                     .attributeDefinitions(
                             AttributeDefinition.builder().attributeName("subreddit").attributeType(ScalarAttributeType.S).build(),
-                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
+                            AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("author").attributeType(ScalarAttributeType.S).build(),
+                            AttributeDefinition.builder().attributeName("createdUtc").attributeType(ScalarAttributeType.N).build())
+                    .globalSecondaryIndexes(
+                            GlobalSecondaryIndex.builder()
+                                    .indexName("author-index")
+                                    .keySchema(
+                                            KeySchemaElement.builder().attributeName("author").keyType(KeyType.HASH).build(),
+                                            KeySchemaElement.builder().attributeName("createdUtc").keyType(KeyType.RANGE).build())
+                                    .projection(Projection.builder().projectionType(ProjectionType.ALL).build())
+                                    .build())
                     .billingMode(BillingMode.PAY_PER_REQUEST)
                     .build()).join();
             System.out.println("Table created successfully");
@@ -372,6 +393,132 @@ class MicronautPostIntegrationTest {
                 .verifyComplete();
     }
 
+    @Test
+    void testGsiQueryByAuthor() {
+        String subreddit = "test-gsi-" + UUID.randomUUID();
+        String author = "gsi-author-" + UUID.randomUUID();
+
+        for (int i = 0; i < 2; i++) {
+            CreatePostRequest req = CreatePostRequest.builder()
+                    .subreddit(subreddit).author(author).title("GSI Post " + i).build();
+            StepVerifier.create(client.exchange(HttpRequest.POST("/api/posts", req), Post.class))
+                    .assertNext(response -> assertEquals(HttpStatus.CREATED, response.getStatus()))
+                    .verifyComplete();
+        }
+
+        StepVerifier.create(client.exchange(
+                        HttpRequest.GET("/api/posts/by-author/" + author),
+                        Argument.listOf(Post.class)))
+                .assertNext(response -> {
+                    assertEquals(HttpStatus.OK, response.getStatus());
+                    List<Post> results = response.body();
+                    assertNotNull(results);
+                    assertTrue(results.size() >= 2);
+                    results.forEach(p -> assertEquals(author, p.getAuthor()));
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void testTransactGet() {
+        String subreddit = "test-tg-" + UUID.randomUUID();
+        CreatePostRequest req1 = CreatePostRequest.builder()
+                .subreddit(subreddit).author("tg-author").title("TG 1").build();
+        CreatePostRequest req2 = CreatePostRequest.builder()
+                .subreddit(subreddit).author("tg-author").title("TG 2").build();
+
+        var post1Ref = new Post[1];
+        var post2Ref = new Post[1];
+        StepVerifier.create(client.exchange(HttpRequest.POST("/api/posts", req1), Post.class))
+                .assertNext(r -> {
+                    post1Ref[0] = r.body();
+                }).verifyComplete();
+        StepVerifier.create(client.exchange(HttpRequest.POST("/api/posts", req2), Post.class))
+                .assertNext(r -> {
+                    post2Ref[0] = r.body();
+                }).verifyComplete();
+        assertNotNull(post1Ref[0]);
+        assertNotNull(post2Ref[0]);
+
+        List<List<String>> keys = List.of(
+                List.of(subreddit, post1Ref[0].getId()),
+                List.of(subreddit, post2Ref[0].getId())
+        );
+
+        StepVerifier.create(client.exchange(
+                        HttpRequest.POST("/api/posts/transact-get", keys),
+                        Argument.listOf(Post.class)))
+                .assertNext(response -> {
+                    assertEquals(HttpStatus.OK, response.getStatus());
+                    List<Post> results = response.body();
+                    assertNotNull(results);
+                    assertEquals(2, results.size());
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void testPartiQL() {
+        String subreddit = "test-partiql-" + UUID.randomUUID();
+        CreatePostRequest req = CreatePostRequest.builder()
+                .subreddit(subreddit).author("partiql-author").title("PartiQL Test").build();
+
+        var createdRef = new Post[1];
+        StepVerifier.create(client.exchange(HttpRequest.POST("/api/posts", req), Post.class))
+                .assertNext(r -> {
+                    createdRef[0] = r.body();
+                }).verifyComplete();
+        assertNotNull(createdRef[0]);
+
+        PartiQLRequest partiqlReq = new PartiQLRequest(
+                "SELECT * FROM \"posts\" WHERE subreddit='%s' AND id='%s'".formatted(subreddit, createdRef[0].getId()));
+
+        StepVerifier.create(client.exchange(
+                        HttpRequest.POST("/api/posts/partiql", partiqlReq),
+                        Void.class))
+                .assertNext(response -> assertEquals(HttpStatus.OK, response.getStatus()))
+                .verifyComplete();
+    }
+
+    @Test
+    void testListTables() {
+        StepVerifier.create(client.exchange(
+                        HttpRequest.GET("/api/posts/admin/tables"),
+                        Argument.listOf(String.class)))
+                .assertNext(response -> {
+                    assertEquals(HttpStatus.OK, response.getStatus());
+                    List<String> tables = response.body();
+                    assertNotNull(tables);
+                    assertTrue(tables.contains("posts"));
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void testEntityTable() {
+        String subreddit = "test-entity-" + UUID.randomUUID();
+        CreatePostRequest req = CreatePostRequest.builder()
+                .subreddit(subreddit).author("entity-author").title("Entity Test").build();
+
+        var createdRef = new Post[1];
+        StepVerifier.create(client.exchange(HttpRequest.POST("/api/posts", req), Post.class))
+                .assertNext(r -> {
+                    createdRef[0] = r.body();
+                }).verifyComplete();
+        assertNotNull(createdRef[0]);
+
+        StepVerifier.create(client.exchange(
+                        HttpRequest.GET("/api/posts/entity/" + subreddit + "/" + createdRef[0].getId()),
+                        Post.class))
+                .assertNext(response -> {
+                    assertEquals(HttpStatus.OK, response.getStatus());
+                    Post entityResult = response.body();
+                    assertNotNull(entityResult);
+                    assertEquals(createdRef[0].getId(), entityResult.getId());
+                })
+                .verifyComplete();
+    }
+
     /**
      * Local DTO for deserializing paginated responses.
      * The shared dev.hogwai.demo.dto.PagedResponse cannot be deserialized by Jackson
@@ -384,11 +531,28 @@ class MicronautPostIntegrationTest {
         private String nextCursor;
         private boolean hasMore;
 
-        public List<Post> getItems() { return items; }
-        public void setItems(List<Post> items) { this.items = items; }
-        public String getNextCursor() { return nextCursor; }
-        public void setNextCursor(String nextCursor) { this.nextCursor = nextCursor; }
-        public boolean isHasMore() { return hasMore; }
-        public void setHasMore(boolean hasMore) { this.hasMore = hasMore; }
+        public List<Post> getItems() {
+            return items;
+        }
+
+        public void setItems(List<Post> items) {
+            this.items = items;
+        }
+
+        public String getNextCursor() {
+            return nextCursor;
+        }
+
+        public void setNextCursor(String nextCursor) {
+            this.nextCursor = nextCursor;
+        }
+
+        public boolean isHasMore() {
+            return hasMore;
+        }
+
+        public void setHasMore(boolean hasMore) {
+            this.hasMore = hasMore;
+        }
     }
 }

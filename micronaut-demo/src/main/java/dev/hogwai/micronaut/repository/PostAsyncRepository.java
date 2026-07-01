@@ -9,7 +9,10 @@ import dev.hogwai.dynamodb.simplified.result.PagedResult;
 import jakarta.inject.Singleton;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ExecuteStatementRequest;
+import software.amazon.awssdk.services.dynamodb.model.ExecuteStatementResponse;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,7 +40,7 @@ public class PostAsyncRepository implements AutoCloseable {
         client.close();
     }
 
-    // ============ Basic CRUD ============
+    // region Basic CRUD
 
     public CompletableFuture<Void> save(Post post) {
         return table.putItem(post);
@@ -61,7 +64,9 @@ public class PostAsyncRepository implements AutoCloseable {
         return table.deleteItem(subreddit, id).thenApply(ignored -> null);
     }
 
-    // ============ Queries by Subreddit ============
+    // endregion
+
+    // region Queries by Subreddit
 
     public CompletableFuture<List<Post>> findBySubreddit(String subreddit) {
         return table.query()
@@ -79,8 +84,8 @@ public class PostAsyncRepository implements AutoCloseable {
     }
 
     public CompletableFuture<PagedResult<Post>> findBySubredditPaginated(String subreddit,
-                                                                          int pageSize,
-                                                                          Map<String, AttributeValue> lastKey) {
+                                                                         int pageSize,
+                                                                         Map<String, AttributeValue> lastKey) {
         var query = table.query()
                 .partitionKey(subreddit)
                 .descending()
@@ -93,7 +98,9 @@ public class PostAsyncRepository implements AutoCloseable {
         return query.executeWithPagination();
     }
 
-    // ============ Queries by ID ============
+    // endregion
+
+    // region Queries by ID
 
     public CompletableFuture<List<Post>> findByIdPrefix(String subreddit, String idPrefix) {
         return table.query()
@@ -107,7 +114,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .executeAll();
     }
 
-    // ============ Queries by Author ============
+    // endregion
+
+    // region Queries by Author
 
     public CompletableFuture<List<Post>> findByAuthor(String subreddit, String author) {
         return table.query()
@@ -123,7 +132,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .executeAll();
     }
 
-    // ============ Temporal Queries ============
+    // endregion
+
+    // region Temporal Queries
 
     public CompletableFuture<List<Post>> findCreatedAfter(String subreddit, long timestampUtc) {
         return table.query()
@@ -149,7 +160,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .executeAll();
     }
 
-    // ============ Keyword Queries ============
+    // endregion
+
+    // region Keyword Queries
 
     public CompletableFuture<List<Post>> findByKeyword(String subreddit, String keyword) {
         return table.query()
@@ -172,7 +185,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .executeAll();
     }
 
-    // ============ Text Search ============
+    // endregion
+
+    // region Text Search
 
     public CompletableFuture<List<Post>> searchByTitle(String subreddit, String text) {
         return table.query()
@@ -198,7 +213,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .executeAll();
     }
 
-    // ============ Combined Queries ============
+    // endregion
+
+    // region Combined Queries
 
     public CompletableFuture<List<Post>> findRecentByAuthor(String subreddit, String author, long sinceUtc) {
         return table.query()
@@ -233,7 +250,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .executeAll();
     }
 
-    // ============ OR Queries ============
+    // endregion
+
+    // region OR Queries
 
     public CompletableFuture<List<Post>> findByEitherAuthor(String subreddit, String author1, String author2) {
         return table.query()
@@ -257,7 +276,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .executeAll();
     }
 
-    // ============ Projections ============
+    // endregion
+
+    // region Projections
 
     public CompletableFuture<List<Post>> findSummaries(String subreddit, int limit) {
         return table.query()
@@ -275,7 +296,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .executeAll();
     }
 
-    // ============ Scans (cross-subreddit) ============
+    // endregion
+
+    // region Scans (cross-subreddit)
 
     public CompletableFuture<List<Post>> findAllByAuthor(String author) {
         return table.scan()
@@ -305,7 +328,9 @@ public class PostAsyncRepository implements AutoCloseable {
         return scan.executeWithPagination();
     }
 
-    // ============ Conditional Operations ============
+    // endregion
+
+    // region Conditional Operations
 
     public CompletableFuture<Void> saveIfNew(Post post) {
         return table.put(post)
@@ -340,7 +365,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .execute();
     }
 
-    // ============ Dynamic Search ============
+    // endregion
+
+    // region Dynamic Search
 
     public CompletableFuture<List<Post>> search(PostSearchCriteria criteria) {
         var query = table.query()
@@ -366,7 +393,9 @@ public class PostAsyncRepository implements AutoCloseable {
         return query.executeAll();
     }
 
-    // ============ Count ============
+    // endregion
+
+    // region Count
 
     public CompletableFuture<Long> countBySubreddit(String subreddit) {
         return table.query()
@@ -374,7 +403,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .count();
     }
 
-    // ============ Stream ============
+    // endregion
+
+    // region Stream
 
     public software.amazon.awssdk.core.async.SdkPublisher<Post> streamBySubreddit(String subreddit) {
         return table.query()
@@ -383,7 +414,9 @@ public class PostAsyncRepository implements AutoCloseable {
                 .streamResults();
     }
 
-    // ============ Filter Building (sync helper) ============
+    // endregion
+
+    // region Filter Building (sync helper)
 
     private void buildFilter(FilterExpression f, PostSearchCriteria criteria) {
         boolean hasPrevious = false;
@@ -427,4 +460,66 @@ public class PostAsyncRepository implements AutoCloseable {
         f.sizeGe(KEYWORDS, value);
         return true;
     }
+
+    // endregion
+
+    // region GSI Query
+
+    public CompletableFuture<List<Post>> queryByAuthorGsi(String author) {
+        return table.index("author-index")
+                .query()
+                .partitionKey(author)
+                .executeAll();
+    }
+
+    // endregion
+
+    // region Transact Get
+
+    public CompletableFuture<List<Post>> transactGet(List<List<String>> keys) {
+        var builder = client.transactGet();
+        for (List<String> key : keys) {
+            builder.addGetItem(table, key.get(0), key.get(1));
+        }
+        return builder.execute().thenApply(results -> {
+            List<Post> items = new ArrayList<>();
+            for (int i = 0; i < keys.size(); i++) {
+                Post item = results.get(i);
+                if (item != null) items.add(item);
+            }
+            return items;
+        });
+    }
+
+    // endregion
+
+    // region PartiQL
+
+    public CompletableFuture<List<Map<String, AttributeValue>>> executePartiQL(String statement) {
+        return client.executeStatement(
+                        ExecuteStatementRequest.builder().statement(statement).build())
+                .thenApply(ExecuteStatementResponse::items);
+    }
+
+    // endregion
+
+    // region List Tables
+
+    public CompletableFuture<List<String>> listTables() {
+        return client.listTables();
+    }
+
+    // endregion
+
+    // region Entity Table
+
+    public CompletableFuture<Void> entityPut(Post post) {
+        return client.entityTable(Post.class).put(post);
+    }
+
+    public CompletableFuture<Post> entityGet(String pk, String sk) {
+        return client.entityTable(Post.class).get(pk, sk);
+    }
+
+    // endregion
 }

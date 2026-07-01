@@ -6,7 +6,9 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import software.amazon.awssdk.services.dynamodb.model.ExecuteStatementResponse;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 @ApplicationScoped
@@ -33,4 +35,20 @@ public class PostReactiveService {
             });
         });
     }
+
+    // region Transact Get
+
+    public Uni<List<Post>> transactGet(List<List<String>> keys) {
+        return Uni.createFrom().completionStage(repository.transactGet(keys));
+    }
+
+    // endregion
+
+    // region PartiQL
+
+    public Uni<ExecuteStatementResponse> executePartiQL(String statement) {
+        return Uni.createFrom().completionStage(repository.executePartiQL(statement));
+    }
+
+    // endregion
 }

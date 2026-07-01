@@ -5,11 +5,15 @@ import dev.hogwai.demo.search.PostSearchCriteria;
 import dev.hogwai.dynamodb.simplified.DynamoSimplifiedClient;
 import dev.hogwai.dynamodb.simplified.Table;
 import dev.hogwai.dynamodb.simplified.expression.FilterExpression;
+import dev.hogwai.dynamodb.simplified.result.CrossTableBatchWriteResult;
 import dev.hogwai.dynamodb.simplified.result.PagedResult;
 import org.springframework.stereotype.Repository;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ExecuteStatementRequest;
+import software.amazon.awssdk.services.dynamodb.model.ExecuteStatementResponse;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,6 +25,7 @@ public class PostRepository {
     private static final String CREATED_UTC = "createdUtc";
     private static final String TITLE = "title";
     private static final String KEYWORDS = "keywords";
+    private static final String AUTHOR_INDEX = "author-index";
 
     private final Table<Post> table;
     private final DynamoSimplifiedClient client;
@@ -30,7 +35,7 @@ public class PostRepository {
         this.client = client;
     }
 
-    // ============ Base CRUD ============
+    // region Base CRUD
 
     public void save(Post post) {
         table.putItem(post);
@@ -63,7 +68,9 @@ public class PostRepository {
         return query.executeWithPagination();
     }
 
-    // ============ Count ============
+    // endregion
+
+    // region Count
 
     public long countBySubreddit(String subreddit) {
         return table.query()
@@ -71,7 +78,9 @@ public class PostRepository {
                 .count();
     }
 
-    // ============ Dynamic Search ============
+    // endregion
+
+    // region Dynamic Search
 
     public List<Post> search(PostSearchCriteria criteria) {
         var query = table.query()
@@ -140,7 +149,9 @@ public class PostRepository {
         return true;
     }
 
-    // ============ Batch Write ============
+    // endregion
+
+    // region Batch Write
 
     public void batchWrite(List<Post> posts) {
         var batch = client.batchWrite();
@@ -150,7 +161,9 @@ public class PostRepository {
         batch.execute();
     }
 
-    // ============ Batch Get ============
+    // endregion
+
+    // region Batch Get
 
     public List<Post> batchGet(List<Post> posts) {
         var batch = client.batchGet();
@@ -161,7 +174,9 @@ public class PostRepository {
         return result.getItems(table);
     }
 
-    // ============ Transact Write ============
+    // endregion
+
+    // region Transact Write
 
     public void transactWrite(Post post1, Post post2) {
         client.transactWrite()
@@ -170,7 +185,9 @@ public class PostRepository {
                 .execute();
     }
 
-    // ============ Partial Update ============
+    // endregion
+
+    // region Partial Update
 
     public Optional<Post> updatePartial(String subreddit, String id, Map<String, Object> updates) {
         Post keyItem = Post.builder().subreddit(subreddit).id(id).build();
@@ -184,11 +201,99 @@ public class PostRepository {
                 .execute();
     }
 
-    // ============ Delete with Return Values ============
+    // endregion
+
+    // region Delete with Return Values
 
     public Optional<Post> deleteAndReturn(String subreddit, String id) {
         return table.delete(subreddit, id)
                 .returnValues(ReturnValue.ALL_OLD)
                 .execute();
     }
+
+    // endregion
+
+    // region GSI Query
+
+    public List<Post> queryByAuthorGsi(String author) {
+        return table.index(AUTHOR_INDEX)
+                .query()
+                .partitionKey(author)
+                .executeAll();
+    }
+
+    // endregion
+
+    // region Batch Write with Deletes
+
+    public CrossTableBatchWriteResult batchWriteWithDeletes(List<Post> puts, List<String[]> deleteKeys) {
+        var batch = client.batchWrite();
+        for (Post post : puts) {
+            batch.put(table, post);
+        }
+        for (String[] key : deleteKeys) {
+            batch.delete(table, key[0], key[1]);
+        }
+        return batch.execute();
+    }
+
+    // endregion
+
+    // region Advanced Transact Write
+
+    public void transactWriteAdvanced(Post post1, String checkSubreddit, String checkId, Long checkCreatedUtc) {
+        client.transactWrite()
+                .put(table, post1)
+                .conditionCheck(table, checkSubreddit, checkId, c -> c.ge(CREATED_UTC, checkCreatedUtc))
+                .execute();
+    }
+
+    // endregion
+
+    // region Transact Get
+
+    public List<Post> transactGet(List<String[]> keys) {
+        var builder = client.transactGet();
+        for (String[] key : keys) {
+            builder.addGetItem(table, key[0], key[1]);
+        }
+        var results = builder.execute();
+        List<Post> items = new ArrayList<>();
+        for (int i = 0; i < keys.size(); i++) {
+            Post item = results.get(i);
+            if (item != null) items.add(item);
+        }
+        return items;
+    }
+
+    // endregion
+
+    // region PartiQL
+
+    public ExecuteStatementResponse executePartiQL(String statement) {
+        return client.executeStatement(
+                ExecuteStatementRequest.builder().statement(statement).build());
+    }
+
+    // endregion
+
+    // region List Tables
+
+    public List<String> listTables() {
+        return client.listTables();
+    }
+
+    // endregion
+
+    // region Entity Table
+
+    public void entityPut(Post post) {
+        client.entityTable(Post.class).put(post);
+    }
+
+    public Post entityGet(String pk, String sk) {
+        return client.entityTable(Post.class).get(pk, sk);
+    }
+
+    // endregion
 }
