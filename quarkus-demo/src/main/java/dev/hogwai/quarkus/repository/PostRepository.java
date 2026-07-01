@@ -49,8 +49,8 @@ public class PostRepository {
     }
 
     public PagedResult<Post> findBySubredditPaginated(String subreddit,
-                                                       int pageSize,
-                                                       Map<String, AttributeValue> lastKey) {
+                                                      int pageSize,
+                                                      Map<String, AttributeValue> lastKey) {
         var query = table.query()
                 .partitionKey(subreddit)
                 .descending()
@@ -152,4 +152,27 @@ public class PostRepository {
         f.sizeGe(KEYWORDS, value);
         return true;
     }
+
+    // region GSI Query
+
+    public List<Post> queryByAuthorGsi(String author) {
+        return table.index("author-index")
+                .query()
+                .partitionKey(author)
+                .executeAll();
+    }
+
+    // endregion
+
+    // region Entity Table
+
+    public void entityPut(Post post) {
+        client.entityTable(Post.class).put(post);
+    }
+
+    public Post entityGet(String pk, String sk) {
+        return client.entityTable(Post.class).get(pk, sk);
+    }
+
+    // endregion
 }

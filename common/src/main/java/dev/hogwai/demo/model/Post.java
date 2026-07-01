@@ -6,8 +6,12 @@ import lombok.Getter;
 import lombok.Setter;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbPartitionKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondaryPartitionKey;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSecondarySortKey;
 import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbSortKey;
 
+import dev.hogwai.dynamodb.simplified.entity.Entity;
+import dev.hogwai.dynamodb.simplified.entity.KeyComponent;
 import java.util.Set;
 
 @Setter
@@ -15,6 +19,7 @@ import java.util.Set;
 @Builder
 @DynamoDbBean
 @AllArgsConstructor
+@Entity(discriminator = "post", table = "posts")
 public class Post {
 
     private String id;
@@ -31,8 +36,16 @@ public class Post {
     }
 
     @DynamoDbPartitionKey
+    @KeyComponent(component = "PK")
     public String getSubreddit() { return subreddit; }
 
     @DynamoDbSortKey
+    @KeyComponent(component = "SK")
     public String getId() { return id; }
+
+    @DynamoDbSecondaryPartitionKey(indexNames = "author-index")
+    public String getAuthor() { return author; }
+
+    @DynamoDbSecondarySortKey(indexNames = "author-index")
+    public Long getCreatedUtc() { return createdUtc; }
 }

@@ -13,13 +13,7 @@ import jakarta.inject.Inject;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 import java.time.Instant;
-import java.util.Base64;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @ApplicationScoped
 public class PostService {
@@ -111,7 +105,37 @@ public class PostService {
         return repository.findPostsLastHours(subreddit, since);
     }
 
-    // ============ Utility Methods ============
+    // region GSI Query
+
+    public List<Post> getPostsByAuthorGsi(String author) {
+        return repository.queryByAuthorGsi(author);
+    }
+
+    // endregion
+
+    // region Entity Table
+
+    public void entityPut(CreatePostRequest request) {
+        Post post = Post.builder()
+                .id(generateId())
+                .subreddit(request.getSubreddit())
+                .author(request.getAuthor())
+                .title(request.getTitle())
+                .selfText(request.getSelfText())
+                .keywords(request.getKeywords())
+                .createdUtc(Instant.now().getEpochSecond())
+                .permalink(buildPermalink(request.getSubreddit()))
+                .build();
+        repository.entityPut(post);
+    }
+
+    public Post entityGet(String pk, String sk) {
+        return repository.entityGet(pk, sk);
+    }
+
+    // endregion
+
+    // region Utility Methods
 
     private String buildPermalink(String subreddit) {
         return "/r/%s/comments/%s".formatted(subreddit, generateId());
@@ -151,4 +175,6 @@ public class PostService {
             return Collections.emptyMap();
         }
     }
+
+    // endregion
 }

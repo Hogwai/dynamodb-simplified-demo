@@ -3,20 +3,14 @@ package dev.hogwai.quarkus.controller;
 import dev.hogwai.demo.dto.CreatePostRequest;
 import dev.hogwai.demo.dto.PagedResponse;
 import dev.hogwai.demo.model.Post;
+import dev.hogwai.quarkus.dto.PartiQLRequest;
 import dev.hogwai.quarkus.dto.PostSearchRequest;
 import dev.hogwai.quarkus.service.PostReactiveService;
 import dev.hogwai.quarkus.service.PostService;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.DELETE;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.PUT;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
@@ -35,7 +29,7 @@ public class PostController {
         this.postReactiveService = postReactiveService;
     }
 
-    // ===== Sync endpoints =====
+    // region Sync endpoints
 
     @POST
     public Response createPost(CreatePostRequest request) {
@@ -79,13 +73,13 @@ public class PostController {
     @GET
     @Path("/{subreddit}/search")
     public List<Post> search(@PathParam("subreddit") String subreddit,
-                              @QueryParam("author") String author,
-                              @QueryParam("keyword") String keyword,
-                              @QueryParam("since") Long since,
-                              @QueryParam("until") Long until,
-                              @QueryParam("titleContains") String titleContains,
-                              @QueryParam("minKeywords") Integer minKeywords,
-                              @QueryParam("limit") Integer limit) {
+                             @QueryParam("author") String author,
+                             @QueryParam("keyword") String keyword,
+                             @QueryParam("since") Long since,
+                             @QueryParam("until") Long until,
+                             @QueryParam("titleContains") String titleContains,
+                             @QueryParam("minKeywords") Integer minKeywords,
+                             @QueryParam("limit") Integer limit) {
         PostSearchRequest request = PostSearchRequest.builder()
                 .subreddit(subreddit)
                 .author(author)
@@ -103,26 +97,28 @@ public class PostController {
     @GET
     @Path("/{subreddit}/paginated")
     public PagedResponse<Post> listPostsPaginated(@PathParam("subreddit") String subreddit,
-                                                    @QueryParam("pageSize") @jakarta.ws.rs.DefaultValue("20") int pageSize,
-                                                    @QueryParam("cursor") String cursor) {
+                                                  @QueryParam("pageSize") @jakarta.ws.rs.DefaultValue("20") int pageSize,
+                                                  @QueryParam("cursor") String cursor) {
         return postService.getPostsPaginated(subreddit, pageSize, cursor);
     }
 
     @GET
     @Path("/{subreddit}/author/{author}")
     public List<Post> getByAuthor(@PathParam("subreddit") String subreddit,
-                                   @PathParam("author") String author) {
+                                  @PathParam("author") String author) {
         return postService.getPostsByAuthor(subreddit, author);
     }
 
     @GET
     @Path("/{subreddit}/recent")
     public List<Post> getRecent(@PathParam("subreddit") String subreddit,
-                                 @QueryParam("hours") @jakarta.ws.rs.DefaultValue("24") int hours) {
+                                @QueryParam("hours") @jakarta.ws.rs.DefaultValue("24") int hours) {
         return postService.getPostsLastHours(subreddit, hours);
     }
 
-    // ===== Reactive endpoints (Quarkus-exclusive) =====
+    // endregion
+
+    // region Reactive endpoints (Quarkus-exclusive)
 
     @GET
     @Path("/{subreddit}/count")
@@ -136,4 +132,61 @@ public class PostController {
     public Multi<Post> streamPosts(@PathParam("subreddit") String subreddit) {
         return postReactiveService.streamPosts(subreddit);
     }
+
+    // endregion
+
+    // region Sync: GSI Query
+
+    @GET
+    @Path("/by-author/{author}")
+    public List<Post> getByAuthorGsi(@PathParam("author") String author) {
+        return postService.getPostsByAuthorGsi(author);
+    }
+
+    // endregion
+
+    // region Sync: Entity Table
+
+    @POST
+    @Path("/entity")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response entityPut(CreatePostRequest request) {
+        postService.entityPut(request);
+        return Response.status(Response.Status.CREATED).build();
+    }
+
+    @GET
+    @Path("/entity/{pk}/{sk}")
+    public Response entityGet(@PathParam("pk") String pk,
+                              @PathParam("sk") String sk) {
+        Post post = postService.entityGet(pk, sk);
+        if (post == null) return Response.status(Response.Status.NOT_FOUND).build();
+        return Response.ok(post).build();
+    }
+
+    // endregion
+
+    // region Reactive: Transact Get
+
+    @POST
+    @Path("/transact-get")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Uni<List<Post>> transactGet(List<List<String>> keys) {
+        return postReactiveService.transactGet(keys);
+    }
+
+    // endregion
+
+    // region Reactive: PartiQL
+
+    @POST
+    @Path("/partiql")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Uni<Response> executePartiQL(PartiQLRequest request) {
+        return postReactiveService.executePartiQL(request.getStatement())
+                .map(resp -> Response.ok().build());
+    }
+
+    // endregion
 }

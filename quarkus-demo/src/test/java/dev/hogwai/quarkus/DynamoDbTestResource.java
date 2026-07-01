@@ -37,7 +37,17 @@ public class DynamoDbTestResource implements QuarkusTestResourceLifecycleManager
                                 KeySchemaElement.builder().attributeName("id").keyType(KeyType.RANGE).build())
                         .attributeDefinitions(
                                 AttributeDefinition.builder().attributeName("subreddit").attributeType(ScalarAttributeType.S).build(),
-                                AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
+                                AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build(),
+                                AttributeDefinition.builder().attributeName("author").attributeType(ScalarAttributeType.S).build(),
+                                AttributeDefinition.builder().attributeName("createdUtc").attributeType(ScalarAttributeType.N).build())
+                        .globalSecondaryIndexes(
+                                GlobalSecondaryIndex.builder()
+                                        .indexName("author-index")
+                                        .keySchema(
+                                                KeySchemaElement.builder().attributeName("author").keyType(KeyType.HASH).build(),
+                                                KeySchemaElement.builder().attributeName("createdUtc").keyType(KeyType.RANGE).build())
+                                        .projection(Projection.builder().projectionType(ProjectionType.ALL).build())
+                                        .build())
                         .billingMode(BillingMode.PAY_PER_REQUEST)
                         .build());
                 log.info("Created 'posts' table via DynamoDbTestResource");

@@ -2,22 +2,17 @@ package dev.hogwai.springboot.controller;
 
 import dev.hogwai.demo.dto.CreatePostRequest;
 import dev.hogwai.demo.dto.PagedResponse;
-import dev.hogwai.springboot.dto.PostSearchRequest;
 import dev.hogwai.demo.model.Post;
+import dev.hogwai.dynamodb.simplified.result.CrossTableBatchWriteResult;
+import dev.hogwai.springboot.dto.BatchMixedRequest;
+import dev.hogwai.springboot.dto.PartiQLRequest;
+import dev.hogwai.springboot.dto.PostSearchRequest;
+import dev.hogwai.springboot.dto.TransactAdvancedRequest;
 import dev.hogwai.springboot.service.PostService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+import software.amazon.awssdk.services.dynamodb.model.ExecuteStatementResponse;
 
 import java.util.List;
 import java.util.Map;
@@ -32,16 +27,18 @@ public class PostController {
         this.postService = postService;
     }
 
-    // ============ Base: Paginated list ============
+    // region Base: Paginated list
 
     @GetMapping("/{subreddit}")
     public PagedResponse<Post> listPostsPaginated(@PathVariable String subreddit,
-                                                   @RequestParam(defaultValue = "25") int limit,
-                                                   @RequestParam(required = false) String cursor) {
+                                                  @RequestParam(defaultValue = "25") int limit,
+                                                  @RequestParam(required = false) String cursor) {
         return postService.getPostsPaginated(subreddit, limit, cursor);
     }
 
-    // ============ Base: Get single post ============
+    // endregion
+
+    // region Base: Get single post
 
     @GetMapping("/{subreddit}/{id}")
     public ResponseEntity<Post> getPost(@PathVariable String subreddit,
@@ -51,14 +48,18 @@ public class PostController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // ============ Base: Count ============
+    // endregion
+
+    // region Base: Count
 
     @GetMapping("/{subreddit}/count")
     public long countPosts(@PathVariable String subreddit) {
         return postService.countPosts(subreddit);
     }
 
-    // ============ Base: Search ============
+    // endregion
+
+    // region Base: Search
 
     @GetMapping("/{subreddit}/search")
     public List<Post> search(@PathVariable String subreddit,
@@ -83,7 +84,9 @@ public class PostController {
         return postService.search(request);
     }
 
-    // ============ Base: Create post ============
+    // endregion
+
+    // region Base: Create post
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -91,7 +94,9 @@ public class PostController {
         return postService.createPost(request);
     }
 
-    // ============ Base: Update post ============
+    // endregion
+
+    // region Base: Update post
 
     @PutMapping("/{subreddit}/{id}")
     public Post updatePost(@PathVariable String subreddit,
@@ -100,12 +105,14 @@ public class PostController {
         return postService.updatePost(subreddit, id, post);
     }
 
-    // ============ Base: Delete post ============
+    // endregion
+
+    // region Base: Delete post
 
     @DeleteMapping("/{subreddit}/{id}")
     public ResponseEntity<Object> deletePost(@PathVariable String subreddit,
-                                        @PathVariable String id,
-                                        @RequestParam(defaultValue = "false") boolean returnDeleted) {
+                                             @PathVariable String id,
+                                             @RequestParam(defaultValue = "false") boolean returnDeleted) {
         if (returnDeleted) {
             return postService.deleteAndReturn(subreddit, id)
                     .map(ResponseEntity::<Object>ok)
@@ -115,7 +122,9 @@ public class PostController {
         return ResponseEntity.noContent().build();
     }
 
-    // ============ Batch Write ============
+    // endregion
+
+    // region Batch Write
 
     @PostMapping("/batch")
     @ResponseStatus(HttpStatus.CREATED)
@@ -123,14 +132,18 @@ public class PostController {
         return postService.batchWrite(requests);
     }
 
-    // ============ Batch Get ============
+    // endregion
+
+    // region Batch Get
 
     @PostMapping("/batch-get")
     public List<Post> batchGet(@RequestBody List<String[]> keys) {
         return postService.batchGet(keys);
     }
 
-    // ============ Transact Write ============
+    // endregion
+
+    // region Transact Write
 
     @PostMapping("/transact")
     @ResponseStatus(HttpStatus.CREATED)
@@ -141,7 +154,9 @@ public class PostController {
         return postService.transactWrite(requests.get(0), requests.get(1));
     }
 
-    // ============ Partial Update ============
+    // endregion
+
+    // region Partial Update
 
     @PatchMapping("/{subreddit}/{id}")
     public ResponseEntity<Post> updatePartial(@PathVariable String subreddit,
@@ -151,4 +166,79 @@ public class PostController {
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    // endregion
+
+    // region GSI Query by Author
+
+    @GetMapping("/by-author/{author}")
+    public List<Post> getByAuthorGsi(@PathVariable String author) {
+        return postService.getPostsByAuthorGsi(author);
+    }
+
+    // endregion
+
+    // region Batch Write with Deletes
+
+    @PostMapping("/batch-mixed")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CrossTableBatchWriteResult batchWriteMixed(@RequestBody BatchMixedRequest request) {
+        return postService.batchWriteWithDeletes(request.getPuts(), request.getDeletes());
+    }
+
+    // endregion
+
+    // region Advanced Transact Write
+
+    @PostMapping("/transact-advanced")
+    public void transactWriteAdvanced(@RequestBody TransactAdvancedRequest request) {
+        postService.transactWriteAdvanced(request.getPuts(), request.getConditionCheck());
+    }
+
+    // endregion
+
+    // region Transact Get
+
+    @PostMapping("/transact-get")
+    public List<Post> transactGet(@RequestBody List<List<String>> keys) {
+        return postService.transactGet(
+                keys.stream().map(k -> new String[]{k.getFirst(), k.get(1)}).toList());
+    }
+
+    // endregion
+
+    // region PartiQL
+
+    @PostMapping("/partiql")
+    public ExecuteStatementResponse executePartiQL(@RequestBody PartiQLRequest request) {
+        return postService.executePartiQL(request.getStatement());
+    }
+
+    // endregion
+
+    // region List Tables
+
+    @GetMapping("/admin/tables")
+    public List<String> listTables() {
+        return postService.listTables();
+    }
+
+    // endregion
+
+    // region Entity Table
+
+    @PostMapping("/entity")
+    @ResponseStatus(HttpStatus.CREATED)
+    public void entityPut(@RequestBody CreatePostRequest request) {
+        postService.entityPut(request);
+    }
+
+    @GetMapping("/entity/{pk}/{sk}")
+    public ResponseEntity<Post> entityGet(@PathVariable String pk, @PathVariable String sk) {
+        Post post = postService.entityGet(pk, sk);
+        if (post == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(post);
+    }
+
+    // endregion
 }
